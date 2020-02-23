@@ -1,0 +1,29 @@
+# Route traffic 80%  to v1 and 20% to v2
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: maid-account-manager-service
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - maid-account-manager-service-gateway
+  http:
+    - match:
+        - uri:
+            exact: /api/bill/get
+        - uri:
+            exact: /api/bill/pay
+      route:
+        - destination:
+            host: maid-account-manager-service
+            port:
+              number: 8080
+            subset: v1
+          weight: 80
+        - destination:
+            host: maid-account-manager-service
+            port:
+              number: 8080
+            subset: v2
+          weight: 20

@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-manager-service
+  labels:
+    app: payment-manager-service
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    name: http
+  selector:
+    app: payment-manager-service
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-manager-service-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-manager-service
+  template:
+    metadata:
+      labels:
+        app: payment-manager-service
+        version: v1
+    spec:
+      containers:
+        - name: payment-manager-service
+          image: arunma/payment-manager:1.0
+          resources:
+            requests:
+              cpu: "100m"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+
+---
+
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: payment-manager-service-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+
+---
+
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: payment-manager-service
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - payment-manager-service-gateway
+  http:
+  - match:
+    - uri:
+        exact: /api/pay
+    route:
+      - destination:
+          host: payment-manager-service
+          port:
+            number: 8080
+          subset: v1
+
+---
+
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: payment-manager-service
+spec:
+  host: payment-manager-service
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 1
+          connectTimeout: 3s
+        http:
+          http1MaxPendingRequests: 1
+          http2MaxRequests: 1
+          maxRequestsPerConnection: 1
+      outlierDetection:
+        consecutiveErrors: 2
+        interval: 2s
+        baseEjectionTime: 10s
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: custom-ip-space
+      protocol: layer2
+      addresses:
+      - 192.168.64.4/28
+
